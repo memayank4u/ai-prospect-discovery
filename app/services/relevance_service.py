@@ -47,17 +47,22 @@ class RelevanceService:
         interest_keywords: List[str],
         location_keywords: List[str]
     ) -> float:
-        text = f"{candidate.get('name', '')} {candidate.get('location', '')} {candidate.get('source_snippet', '')}".lower()
+        text = f"{candidate.get('name', '')} {candidate.get('source_snippet', '')}".lower()
 
-        score = 0.4  # baseline for search-dork matched results
+        # Candidates must match the core domain interest (e.g. Football) to prevent noise
+        has_interest = False
+        if interest_keywords:
+            if any(re.search(r"\b" + re.escape(kw) + r"\b", text) for kw in interest_keywords):
+                has_interest = True
+            else:
+                return 0.0  # Reject completely if no domain interest match
 
-        # Interest relevance (+0.4)
-        if any(re.search(r"\b" + re.escape(kw) + r"\b", text) for kw in interest_keywords):
-            score += 0.4
+        score = 0.6 if has_interest else 0.4
 
-        # Location relevance (+0.2)
-        if location_keywords and any(kw in text for kw in location_keywords):
-            score += 0.2
+        # Location relevance (+0.3)
+        loc_text = f"{candidate.get('location', '')} {text}".lower()
+        if location_keywords and any(kw in loc_text for kw in location_keywords):
+            score += 0.3
 
         return min(score, 1.0)
 
