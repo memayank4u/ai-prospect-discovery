@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     MAX_RESULTS_PER_PLATFORM: int = 5
     ENABLE_CACHE: bool = True
     CACHE_TTL_SECONDS: int = 3600
-    TIMEOUT_SECONDS: int = 15
+    TIMEOUT_SECONDS: int = 5
 
     model_config = SettingsConfigDict(
         env_file=".env",

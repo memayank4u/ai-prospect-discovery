@@ -48,7 +48,7 @@ class SearchService:
         try:
             results = await self._search_public_fallback(query, max_results)
         except Exception as e:
-            logger.error(f"All search providers failed for query '{query}': {e}")
+            logger.debug(f"Search fallback finished for query '{query}': {e}")
 
         return results
 
@@ -107,11 +107,14 @@ class SearchService:
 
                 with DDGS() as ddgs:
                     return list(ddgs.text(query, max_results=max_results))
-            except Exception as ex:
-                logger.debug(f"DDGS run error: {ex}")
+            except Exception:
                 return []
 
-        raw_results = await asyncio.to_thread(run_sync_ddg)
+        try:
+            raw_results = await asyncio.to_thread(run_sync_ddg)
+        except Exception:
+            raw_results = []
+
         formatted = []
         for item in raw_results:
             formatted.append({

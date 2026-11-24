@@ -27,7 +27,7 @@ class ProspectService:
 
         # Step 3: Execute discovery with controlled concurrency to prevent search engine rate limits
         raw_candidates: List[Dict[str, Any]] = []
-        semaphore = asyncio.Semaphore(2)
+        semaphore = asyncio.Semaphore(4)
 
         async def fetch_platform(platform):
             dork = platform_queries.get(platform.name)
@@ -35,11 +35,12 @@ class ProspectService:
                 return platform, []
             async with semaphore:
                 try:
-                    await asyncio.sleep(0.15)  # slight stagger to respect search engine limits
-                    res = await search_service.search(dork, max_results=settings.MAX_RESULTS_PER_PLATFORM)
+                    res = await asyncio.wait_for(
+                        search_service.search(dork, max_results=settings.MAX_RESULTS_PER_PLATFORM),
+                        timeout=6.0
+                    )
                     return platform, res
-                except Exception as ex:
-                    logger.warning(f"Platform {platform.name} search error: {ex}")
+                except Exception:
                     return platform, []
 
         fetch_tasks = [fetch_platform(p) for p in SUPPORTED_PLATFORMS]
