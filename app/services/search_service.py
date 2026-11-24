@@ -1,10 +1,30 @@
 import asyncio
+import base64
 import logging
 from typing import List, Dict, Any, Optional
+from urllib.parse import parse_qs, urlparse
 import httpx
+from bs4 import BeautifulSoup
 from app.config import settings
 
 logger = logging.getLogger("search_service")
+
+
+def decode_bing_redirect(bing_url: str) -> str:
+    """Decodes Bing's base64 encoded redirect URL to get the clean direct profile link."""
+    try:
+        parsed = urlparse(bing_url)
+        qs = parse_qs(parsed.query)
+        u_val = qs.get("u", [None])[0]
+        if u_val and u_val.startswith("a1"):
+            raw_b64 = u_val[2:]
+            rem = len(raw_b64) % 4
+            if rem > 0:
+                raw_b64 += "=" * (4 - rem)
+            return base64.b64decode(raw_b64).decode("utf-8", errors="ignore")
+    except Exception:
+        pass
+    return bing_url
 
 
 class SearchService:
@@ -13,8 +33,8 @@ class SearchService:
 
     async def search(self, query: str, max_results: int = 5) -> List[Dict[str, Any]]:
         """
-        Executes search across the configured search provider.
-        Falls back automatically if the primary provider fails.
+        Executes search across configured search providers.
+        Falls back automatically if a provider fails or blocks cloud data center IPs.
         """
         results = []
 
@@ -36,21 +56,56 @@ class SearchService:
             except Exception as e:
                 logger.warning(f"Google CSE failed: {e}. Trying fallback.")
 
-        # 3. DuckDuckGo Search (Default / Zero-cost)
+        # 3. DuckDuckGo / ddgs
         try:
             results = await self._search_duckduckgo(query, max_results)
             if results:
                 return results
         except Exception as e:
-            logger.warning(f"DuckDuckGo search error: {e}. Trying public HTTP search.")
+            logger.debug(f"DuckDuckGo search error: {e}. Trying Bing.")
 
-        # 4. Fallback direct HTTP public search
+        # 4. Bing Search (Highly reliable on cloud datacenter IPs)
+        try:
+            results = await self._search_bing(query, max_results)
+            if results:
+                return results
+        except Exception as e:
+            logger.debug(f"Bing search error: {e}. Trying public HTML.")
+
+        # 5. Fallback direct HTML public search
         try:
             results = await self._search_public_fallback(query, max_results)
         except Exception as e:
             logger.debug(f"Search fallback finished for query '{query}': {e}")
 
         return results
+
+    async def _search_bing(self, query: str, max_results: int) -> List[Dict[str, Any]]:
+        url = "https://www.bing.com/search"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9"
+        }
+        async with httpx.AsyncClient(timeout=4.0, follow_redirects=True) as client:
+            resp = await client.get(url, params={"q": query}, headers=headers)
+            if resp.status_code != 200:
+                return []
+
+            soup = BeautifulSoup(resp.text, "html.parser")
+            results = []
+            for li in soup.select("li.b_algo"):
+                h2 = li.select_one("h2 a")
+                p = li.select_one(".b_caption p")
+                if h2 and h2.get("href"):
+                    real_url = decode_bing_redirect(h2["href"])
+                    results.append({
+                        "title": h2.get_text(strip=True),
+                        "url": real_url,
+                        "snippet": p.get_text(strip=True) if p else ""
+                    })
+                    if len(results) >= max_results:
+                        break
+            return results
 
     async def _search_serpapi(self, query: str, max_results: int) -> List[Dict[str, Any]]:
         url = "https://serpapi.com/search.json"
