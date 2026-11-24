@@ -46,7 +46,11 @@ def clean_prospect_name(raw_title: str) -> str:
     name = re.sub(r'["\'\(\)\[\]]', "", name).strip()
 
     # Remove common prefix titles if present (e.g. Dr., Mr., etc.)
-    # Keep it clean
+    # Reject generic headlines
+    lower_name = name.lower()
+    if any(k in lower_name for k in ["scores", "fixtures", "latest news", "breaking news", "highlights", "nfl.com", "espn"]):
+        return "Unknown"
+
     words = name.split()
     if len(words) > 5:
         # If still too long, take the first 2-3 words (likely First and Last name)

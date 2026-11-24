@@ -64,10 +64,19 @@ class ProfileExtractor:
     def _detect_location(self, snippet: str, title: str) -> Optional[str]:
         """Scans snippet for common location patterns like 'Location: Washington, DC' or 'based in London'."""
         text = f"{title} {snippet}"
-        match = re.search(r"(?:based in|located in|living in|from)\s+([A-Za-z\s]+(?:,\s*[A-Za-z\s]+)?)", text, re.IGNORECASE)
+        match = re.search(r"(?:based in|located in|living in|lives in|location:)\s+([A-Za-z\s]+(?:,\s*[A-Za-z\s]+)?)", text, re.IGNORECASE)
+        if not match:
+            # Match 'from City, Country' avoiding common non-location starting words
+            match = re.search(r"\bfrom\s+(?!the\b|a\b|an\b|our\b|all\b)([A-Za-z\s]+(?:,\s*[A-Za-z\s]+)?)", text, re.IGNORECASE)
+
         if match:
             candidate = match.group(1).strip()
-            ignored_locations = {"google", "facebook", "linkedin", "instagram", "twitter", "x", "youtube", "threads", "whatsapp", "website", "online", "the web", "scratch"}
+            ignored_locations = {
+                "google", "facebook", "linkedin", "instagram", "twitter", "x",
+                "youtube", "threads", "whatsapp", "website", "online", "the web",
+                "scratch", "the premier league", "championship", "the premier league, championship",
+                "premier league", "all major football leagues"
+            }
             if candidate.lower() in ignored_locations:
                 return None
             # Avoid long sentences

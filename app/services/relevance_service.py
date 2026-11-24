@@ -47,24 +47,36 @@ class RelevanceService:
         interest_keywords: List[str],
         location_keywords: List[str]
     ) -> float:
-        text = f"{candidate.get('name', '')} {candidate.get('source_snippet', '')}".lower()
+        name = candidate.get("name", "")
+        cand_loc = candidate.get("location", "")
+        snippet = candidate.get("source_snippet", "")
+        text = f"{name} {snippet}".lower()
+        full_loc_text = f"{cand_loc} {text}".lower()
 
-        # Candidates must match the core domain interest (e.g. Football) to prevent noise
-        has_interest = False
+        # 1. Reject generic media headlines, sports scores, and aggregate websites
+        bad_keywords = [
+            "latest news", "scores & fixtures", "scores,", "highlights",
+            "nfl.com", "espn", "bbc sport", "premier league", "championship"
+        ]
+        if any(bw in name.lower() or bw in cand_loc.lower() for bw in bad_keywords):
+            return 0.0
+
+        # 2. Candidate must match the core domain interest (e.g. Football)
         if interest_keywords:
-            if any(re.search(r"\b" + re.escape(kw) + r"\b", text) for kw in interest_keywords):
-                has_interest = True
-            else:
-                return 0.0  # Reject completely if no domain interest match
+            if not any(re.search(r"\b" + re.escape(kw) + r"\b", text) for kw in interest_keywords):
+                return 0.0
 
-        score = 0.6 if has_interest else 0.4
+        # 3. Candidate must match target location when location is specified in query
+        if location_keywords:
+            # Must mention target location in snippet or location field
+            if not any(kw in full_loc_text for kw in location_keywords):
+                return 0.0
 
-        # Location relevance (+0.3)
-        loc_text = f"{candidate.get('location', '')} {text}".lower()
-        if location_keywords and any(kw in loc_text for kw in location_keywords):
-            score += 0.3
+            # If an explicit location was parsed (e.g. "Chicago"), and it conflicts with target location, reject!
+            if cand_loc and not any(kw in cand_loc.lower() for kw in location_keywords):
+                return 0.0
 
-        return min(score, 1.0)
+        return 0.8
 
 
 relevance_service = RelevanceService()

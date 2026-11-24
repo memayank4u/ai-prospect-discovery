@@ -23,7 +23,9 @@ class GooglePlatform(BasePlatform):
         excluded_domains = [
             "google.", "bing.", "yahoo.", "duckduckgo.", "wikipedia.org",
             "linkedin.com", "instagram.com", "twitter.com", "x.com",
-            "facebook.com", "youtube.com", "threads.net"
+            "facebook.com", "youtube.com", "threads.net",
+            "bbc.co.uk", "bbc.com", "espn.com", "nfl.com", "fifa.com",
+            "skysports.com", "goal.com", "cricbuzz.com", "premierleague.com"
         ]
         if any(bad in netloc for bad in excluded_domains):
             return False
